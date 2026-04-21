@@ -1825,6 +1825,21 @@ const SchoolDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
 
+  const canAccess = (module: 'communications' | 'authorizations' | 'students' | 'scanning') => {
+    if (!user || user.role === 'admin') return true;
+    if (!user.managedModules || user.managedModules.length === 0) return true; // Default behavior if not set
+    return user.managedModules.includes(module);
+  };
+
+  const isAssigned = (grade?: string) => {
+    if (!user || user.role === 'admin') return true;
+    if (!user.assignedGrades || user.assignedGrades.length === 0) return true; // Default behavior
+    return grade ? user.assignedGrades.includes(grade) : false;
+  };
+
+  const filteredStudents = allStudents.filter(s => isAssigned(s.grade));
+  const filteredComms = comms.filter(c => !c.targetGrades || c.targetGrades.some(g => isAssigned(g)));
+
   const handleDeleteAuth = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'authorizations', id));
@@ -1876,13 +1891,17 @@ const SchoolDashboard = () => {
     const unsubComms = onSnapshot(qComms, (snapshot) => {
       const newComms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Communication));
       
-      // Notify staff of new parent-submitted events
+      // Notify staff of new parent-submitted events - Respecting permissions
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') {
           const data = change.doc.data() as Communication;
           const isRecent = new Date(data.date).getTime() > Date.now() - 10000;
-          // If it's an event from a parent, notify staff
-          if (isRecent && data.category === 'event' && data.authorId !== user.uid) {
+          
+          // Check if this staff member is responsible for the grades in the communication
+          const isResponsible = !data.targetGrades || data.targetGrades.some(g => isAssigned(g));
+
+          // If it's an event from a parent, notify staff if they have permission
+          if (isRecent && data.category === 'event' && data.authorId !== user.uid && isResponsible && canAccess('communications')) {
             addNotification({
               title: `Nueva Solicitud: ${data.title}`,
               content: `Un padre ha solicitado un evento: ${data.content}`,
@@ -2145,37 +2164,45 @@ const SchoolDashboard = () => {
         </div>
       </header>
 
-      {/* Navigation */}
+      // Navigation - Filtered by permissions
       <div className="bg-white border-b border-slate-200 px-4 sm:px-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-1 sm:gap-8 py-2 sm:py-0">
-        <button 
-          onClick={() => setActiveTab('scanner')}
-          className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'scanner' ? 'border-indigo-600 text-indigo-600 bg-indigo-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-indigo-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
-        >
-          Retiros e Historial
-        </button>
-        <button 
-          onClick={() => setActiveTab('comms')}
-          className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none flex items-center justify-between sm:justify-center gap-2 ${activeTab === 'comms' ? 'border-emerald-600 text-emerald-600 bg-emerald-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-emerald-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
-        >
-          <span>Comunicados</span>
-          {comms.filter(c => (c.category === 'event' || c.category === 'message') && c.authorId !== user.uid).length > 0 && (
-            <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full">
-              {comms.filter(c => (c.category === 'event' || c.category === 'message') && c.authorId !== user.uid).length}
-            </span>
-          )}
-        </button>
-        <button 
-          onClick={() => setActiveTab('calendar')}
-          className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'calendar' ? 'border-violet-600 text-violet-600 bg-violet-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-violet-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
-        >
-          Calendario
-        </button>
-        <button 
-          onClick={() => setActiveTab('students')}
-          className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'students' ? 'border-amber-600 text-amber-600 bg-amber-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-amber-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
-        >
-          Alumnos y Cursos
-        </button>
+        {canAccess('scanning') && (
+          <button 
+            onClick={() => setActiveTab('scanner')}
+            className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'scanner' ? 'border-indigo-600 text-indigo-600 bg-indigo-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-indigo-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
+          >
+            Retiros e Historial
+          </button>
+        )}
+        {canAccess('communications') && (
+          <button 
+            onClick={() => setActiveTab('comms')}
+            className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none flex items-center justify-between sm:justify-center gap-2 ${activeTab === 'comms' ? 'border-emerald-600 text-emerald-600 bg-emerald-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-emerald-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
+          >
+            <span>Comunicados</span>
+            {filteredComms.filter(c => (c.category === 'event' || c.category === 'message') && c.authorId !== user.uid).length > 0 && (
+              <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full">
+                {filteredComms.filter(c => (c.category === 'event' || c.category === 'message') && c.authorId !== user.uid).length}
+              </span>
+            )}
+          </button>
+        )}
+        {canAccess('communications') && (
+          <button 
+            onClick={() => setActiveTab('calendar')}
+            className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'calendar' ? 'border-violet-600 text-violet-600 bg-violet-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-violet-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
+          >
+            Calendario
+          </button>
+        )}
+        {canAccess('students') && (
+          <button 
+            onClick={() => setActiveTab('students')}
+            className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'students' ? 'border-amber-600 text-amber-600 bg-amber-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-amber-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
+          >
+            Alumnos y Cursos
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -2365,11 +2392,11 @@ const SchoolDashboard = () => {
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold">Interacciones con Padres</h2>
-                <Badge variant="info">{comms.filter(c => (c.category === 'event' || c.category === 'message') && c.authorId !== user.uid).length} Pendientes</Badge>
+                <Badge variant="info">{filteredComms.filter(c => (c.category === 'event' || c.category === 'message') && c.authorId !== user.uid).length} Pendientes</Badge>
               </div>
 
               <div className="space-y-4">
-                {comms
+                {filteredComms
                   .filter(c => (c.category === 'event' || c.category === 'message') && c.authorId !== user.uid)
                   .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                   .map(comm => (
@@ -2585,7 +2612,7 @@ const SchoolDashboard = () => {
               </div>
 
               {Object.entries(
-                allStudents
+                filteredStudents
                   .filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .reduce((acc, student) => {
                     const key = `${student.grade || 'Sin Grado'} - ${student.class || 'Sin Sección'}`;
@@ -2624,10 +2651,10 @@ const SchoolDashboard = () => {
                 </Card>
               ))}
               
-              {allStudents.length === 0 && (
+              {filteredStudents.length === 0 && (
                 <Card className="text-center py-12">
                   <Users size={48} className="mx-auto text-slate-200 mb-4" />
-                  <p className="text-slate-500 font-medium">No hay alumnos registrados en este colegio</p>
+                  <p className="text-slate-500 font-medium">{allStudents.length > 0 ? 'No tienes alumnos asignados en tus grados permitidos' : 'No hay alumnos registrados en este colegio'}</p>
                 </Card>
               )}
             </motion.div>
@@ -2646,7 +2673,7 @@ const SchoolDashboard = () => {
                 <Button onClick={() => setIsEventModalOpen(true)}>Nuevo Evento</Button>
               </div>
               <div className="grid grid-cols-1 gap-4">
-                {comms.filter(c => c.category === 'event' || c.deadline).sort((a, b) => new Date(a.deadline || a.date).getTime() - new Date(b.deadline || b.date).getTime()).map(event => (
+                {filteredComms.filter(c => c.category === 'event' || c.deadline).sort((a, b) => new Date(a.deadline || a.date).getTime() - new Date(b.deadline || b.date).getTime()).map(event => (
                   <Card key={`cal-admin-${event.id}`} className="flex gap-4 items-start">
                     <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex flex-col items-center justify-center text-white shrink-0">
                       <span className="text-[10px] font-bold uppercase">{format(new Date(event.deadline || event.date), 'MMM', { locale: es })}</span>
@@ -2677,7 +2704,7 @@ const SchoolDashboard = () => {
                     </div>
                   </Card>
                 ))}
-                {comms.filter(c => c.category === 'event' || c.deadline).length === 0 && (
+                {filteredComms.filter(c => c.category === 'event' || c.deadline).length === 0 && (
                   <Card className="text-center py-12">
                     <CalendarIcon size={48} className="mx-auto text-slate-200 mb-4" />
                     <p className="text-slate-500 font-medium">No hay eventos registrados</p>
@@ -2875,7 +2902,15 @@ const AdminDashboard = () => {
   const [isSchoolModalOpen, setIsSchoolModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [newSchool, setNewSchool] = useState({ name: '', address: '' });
-  const [newUser, setNewUser] = useState({ name: '', email: '', role: 'parent' as 'parent' | 'school' | 'admin', schoolId: '' });
+  const [newUser, setNewUser] = useState<UserProfile>({ 
+    uid: '', 
+    name: '', 
+    email: '', 
+    role: 'parent', 
+    schoolId: '',
+    assignedGrades: [],
+    managedModules: ['communications', 'authorizations', 'students', 'scanning']
+  });
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -2958,12 +2993,20 @@ const AdminDashboard = () => {
     try {
       const uid = Math.random().toString(36).substr(2, 9); // Mock UID for new user
       await setDoc(doc(db, 'users', uid), {
-        uid,
         ...newUser,
+        uid,
         schoolId: newUser.schoolId || null
       });
       setIsUserModalOpen(false);
-      setNewUser({ name: '', email: '', role: 'parent', schoolId: '' });
+      setNewUser({ 
+        uid: '', 
+        name: '', 
+        email: '', 
+        role: 'parent', 
+        schoolId: '',
+        assignedGrades: [],
+        managedModules: ['communications', 'authorizations', 'students', 'scanning']
+      });
     } catch (error) {
       handleFirestoreError(error, FirestoreOperationType.CREATE, 'users');
     }
@@ -2977,7 +3020,9 @@ const AdminDashboard = () => {
         name: editingUser.name,
         email: editingUser.email,
         role: editingUser.role,
-        schoolId: editingUser.schoolId || null
+        schoolId: editingUser.schoolId || null,
+        assignedGrades: editingUser.assignedGrades || [],
+        managedModules: editingUser.managedModules || []
       });
       setIsUserModalOpen(false);
       setEditingUser(null);
@@ -3407,6 +3452,47 @@ const AdminDashboard = () => {
                       ))}
                     </select>
                   </div>
+                )}
+                {(editingUser?.role === 'school' || newUser.role === 'school') && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Módulos Permitidos</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['communications', 'authorizations', 'students', 'scanning'].map((mod) => (
+                          <label key={mod} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg cursor-pointer hover:bg-indigo-50 transition-colors">
+                            <input 
+                              type="checkbox"
+                              checked={editingUser ? editingUser.managedModules?.includes(mod as any) : newUser.managedModules?.includes(mod as any)}
+                              onChange={(e) => {
+                                const currentModules = editingUser ? (editingUser.managedModules || []) : (newUser.managedModules || []);
+                                const newModules = e.target.checked 
+                                  ? [...currentModules, mod as any]
+                                  : currentModules.filter(m => m !== mod);
+                                if (editingUser) setEditingUser({...editingUser, managedModules: newModules});
+                                else setNewUser({...newUser, managedModules: newModules});
+                              }}
+                              className="accent-indigo-600"
+                            />
+                            <span className="text-xs font-medium text-slate-600 capitalize">{mod}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Grados Asignados (Separados por coma)</label>
+                      <input 
+                        type="text" 
+                        value={editingUser ? (editingUser.assignedGrades || []).join(', ') : (newUser.assignedGrades || []).join(', ')}
+                        onChange={e => {
+                          const grades = e.target.value.split(',').map(g => g.trim()).filter(g => g !== '');
+                          if (editingUser) setEditingUser({...editingUser, assignedGrades: grades});
+                          else setNewUser({...newUser, assignedGrades: grades});
+                        }}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                        placeholder="Ej: 1ro A, 2do B"
+                      />
+                    </div>
+                  </>
                 )}
                 <Button type="submit" className="w-full py-4 mt-4">
                   {editingUser ? 'Guardar Cambios' : 'Crear Usuario'}

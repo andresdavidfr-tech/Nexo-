@@ -8,6 +8,8 @@ export interface UserProfile {
   gradeId?: string;
   classId?: string;
   photoUrl?: string;
+  assignedGrades?: string[]; // Granular permissions: list of grades a staff member is responsible for
+  managedModules?: ('communications' | 'authorizations' | 'students' | 'scanning')[]; // Modules the staff member can access
 }
 
 export interface School {
