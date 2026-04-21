@@ -1,3 +1,10 @@
+export interface UserNotificationPrefs {
+  communications: boolean;
+  authorizations: boolean;
+  urgent: boolean;
+  events: boolean;
+}
+
 export interface UserProfile {
   id?: string;
   uid: string;
@@ -10,6 +17,7 @@ export interface UserProfile {
   photoUrl?: string;
   assignedGrades?: string[]; // Granular permissions: list of grades a staff member is responsible for
   managedModules?: ('communications' | 'authorizations' | 'students' | 'scanning')[]; // Modules the staff member can access
+  notificationPrefs?: UserNotificationPrefs;
 }
 
 export interface School {

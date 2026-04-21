@@ -64,7 +64,7 @@ import {
   handleFirestoreError,
   FirestoreOperationType
 } from './firebase';
-import { UserProfile, Communication, Authorization, Student, School } from './types';
+import { UserProfile, Communication, Authorization, Student, School, UserNotificationPrefs } from './types';
 import { summarizeCommunication } from './services/geminiService';
 
 const addToCalendar = (comm: Communication) => {
@@ -215,6 +215,7 @@ const useNotifications = () => {
 };
 
 const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [permission, setPermission] = useState<NotificationPermission>(
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
@@ -228,6 +229,17 @@ const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const addNotification = (n: Omit<AppNotification, 'id' | 'read' | 'date'>) => {
+    // Check user preferences if available
+    if (user?.notificationPrefs) {
+      const prefs = user.notificationPrefs;
+      if (n.category === 'info' && !prefs.communications) return;
+      if (n.category === 'urgent' && !prefs.urgent) return;
+      if (n.category === 'event' && !prefs.events) return;
+      if (n.category === 'message' && !prefs.communications) return;
+      // Authorizations are usually handled by category or specific logic if needed
+      if (n.title.toLowerCase().includes('autorización') && !prefs.authorizations) return;
+    }
+
     const newNotification: AppNotification = {
       ...n,
       id: Math.random().toString(36).substr(2, 9),
@@ -412,7 +424,9 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("Auth state changed:", firebaseUser?.email || "No user");
       if (firebaseUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userRef);
+          
           if (userDoc.exists()) {
             const userData = userDoc.data() as UserProfile;
             console.log("User doc found:", userData.role);
@@ -451,6 +465,16 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               setUser(newUser);
             }
           }
+
+          // Real-time listener for user document
+          const unsubUser = onSnapshot(userRef, (snapshot) => {
+            if (snapshot.exists()) {
+              setUser(snapshot.data() as UserProfile);
+            }
+          });
+          
+          // Note: In a production app, we would store unsubUser to clean it up when the auth status changes or component unmounts.
+          // For simplicity here, it will be naturally replaced on the next onAuthStateChanged run if it happens.
         } catch (error) {
           console.error("Error in onAuthStateChanged:", error);
         }
@@ -632,6 +656,166 @@ const Login = () => {
   );
 };
 
+const SettingsContent = () => {
+  const { user } = useAuth();
+  const { addNotification } = useNotifications();
+  const [prefs, setPrefs] = useState<UserNotificationPrefs>(user?.notificationPrefs || {
+    communications: true,
+    authorizations: true,
+    urgent: true,
+    events: true
+  });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleToggle = (key: keyof UserNotificationPrefs) => {
+    setPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const savePrefs = async () => {
+    if (!user?.uid) return;
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        notificationPrefs: prefs
+      });
+      addNotification({
+        title: 'Preferencias guardadas',
+        content: 'Tus preferencias de notificación han sido actualizadas con éxito.',
+        category: 'success',
+        isImportant: false
+      });
+    } catch (error) {
+      console.error("Error saving preferences:", error);
+      alert("Error al guardar las preferencias. Asegúrate de tener conexión a internet.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const PreferenceItem = ({ 
+    id, 
+    title, 
+    description, 
+    icon: Icon, 
+    active, 
+    colorClass 
+  }: { 
+    id: keyof UserNotificationPrefs, 
+    title: string, 
+    description: string, 
+    icon: any, 
+    active: boolean,
+    colorClass: string
+  }) => (
+    <div 
+      onClick={() => handleToggle(id)}
+      className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-slate-50 transition-all group cursor-pointer"
+    >
+      <div className="flex items-center gap-4">
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${active ? colorClass : 'bg-slate-100 text-slate-400'}`}>
+          <Icon size={24} />
+        </div>
+        <div>
+          <p className="font-bold text-slate-900">{title}</p>
+          <p className="text-xs text-slate-500 font-medium">{description}</p>
+        </div>
+      </div>
+      <div className={`w-14 h-7 rounded-full relative transition-all duration-300 shadow-inner ${active ? 'bg-indigo-600' : 'bg-slate-200'}`}>
+        <motion.div 
+          animate={{ x: active ? 28 : 4 }}
+          className="absolute top-1.5 w-4 h-4 bg-white rounded-full shadow-md"
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-2xl mx-auto py-8"
+    >
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-16 h-16 bg-indigo-600 text-white rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-200">
+          <Settings size={32} />
+        </div>
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Configuración</h2>
+          <p className="text-slate-500 font-medium text-lg">Personaliza tu experiencia en Nexo</p>
+        </div>
+      </div>
+
+      <div className="space-y-6 mb-12">
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white">
+          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 ml-2">Preferencias de Alertas</h3>
+          
+          <div className="space-y-3">
+            <PreferenceItem 
+              id="urgent"
+              title="Avisos Urgentes"
+              description="Alertas sanitarias, cambios de horario u otros eventos de hoy"
+              icon={AlertCircle}
+              active={prefs.urgent}
+              colorClass="bg-rose-100 text-rose-600"
+            />
+            <PreferenceItem 
+              id="communications"
+              title="Comunicados Generales"
+              description="Información escolar, noticias y circulares"
+              icon={Inbox}
+              active={prefs.communications}
+              colorClass="bg-indigo-100 text-indigo-600"
+            />
+            <PreferenceItem 
+              id="events"
+              title="Eventos y Calendario"
+              description="Recordatorios de actos escolares, reuniones y deportes"
+              icon={CalendarIcon}
+              active={prefs.events}
+              colorClass="bg-amber-100 text-amber-600"
+            />
+            <PreferenceItem 
+              id="authorizations"
+              title="Autorizaciones de Retiro"
+              description="Confirmaciones cuando tus hijos son retirados del colegio"
+              icon={Shield}
+              active={prefs.authorizations}
+              colorClass="bg-emerald-100 text-emerald-600"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <Button 
+          onClick={savePrefs} 
+          className="flex-1 py-6 text-lg font-black rounded-3xl shadow-2xl shadow-indigo-200/50" 
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <>
+              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="mr-2"><Activity size={20} /></motion.div>
+              Guardando...
+            </>
+          ) : 'Guardar Preferencias'}
+        </Button>
+      </div>
+      
+      <div className="mt-8 p-6 bg-amber-50 rounded-3xl border border-amber-100 flex gap-4">
+        <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+          <Bell size={20} className="animate-bell" />
+        </div>
+        <p className="text-xs text-amber-800 font-medium leading-relaxed">
+          <span className="font-bold block mb-1 uppercase tracking-wider text-[10px]">Nota Importante</span>
+          Estas preferencias controlan las notificaciones visuales y sonoras en tiempo real. 
+          Seguirás pudiendo ver todos los mensajes en tu bandeja de entrada.
+        </p>
+      </div>
+    </motion.div>
+  );
+};
+
 const ParentDashboard = () => {
   const { user, logout } = useAuth();
   const { addNotification } = useNotifications();
@@ -641,7 +825,7 @@ const ParentDashboard = () => {
   const studentsRef = useRef<Student[]>([]);
   const authsRef = useRef<Authorization[]>([]);
   const [school, setSchool] = useState<School | null>(null);
-  const [activeTab, setActiveTab] = useState<'inbox' | 'auths' | 'students' | 'calendar' | 'messages'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'auths' | 'students' | 'calendar' | 'messages' | 'settings'>('inbox');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
@@ -1005,6 +1189,12 @@ const ParentDashboard = () => {
           className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'messages' ? 'border-rose-600 text-rose-600 bg-rose-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-rose-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
         >
           Mensajes
+        </button>
+        <button 
+          onClick={() => setActiveTab('settings')}
+          className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'settings' ? 'border-indigo-600 text-indigo-600 bg-indigo-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-indigo-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
+        >
+          Ajustes
         </button>
       </div>
 
@@ -1590,6 +1780,17 @@ const ParentDashboard = () => {
               </AnimatePresence>
             </motion.div>
           )}
+
+          {activeTab === 'settings' && (
+            <motion.div 
+              key="settings"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <SettingsContent />
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
 
@@ -1804,7 +2005,7 @@ const SchoolDashboard = () => {
   const [school, setSchool] = useState<School | null>(null);
   const [editingComm, setEditingComm] = useState<Communication | null>(null);
   const [isEditCommModalOpen, setIsEditCommModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scanner' | 'comms' | 'calendar' | 'students'>('scanner');
+  const [activeTab, setActiveTab] = useState<'scanner' | 'comms' | 'calendar' | 'students' | 'settings'>('scanner');
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [newComm, setNewComm] = useState({ 
     title: '', 
@@ -2212,6 +2413,12 @@ const SchoolDashboard = () => {
             Alumnos y Cursos
           </button>
         )}
+        <button 
+          onClick={() => setActiveTab('settings')}
+          className={`py-3 sm:py-4 px-4 sm:px-2 font-bold text-sm transition-all border-l-4 sm:border-l-0 sm:border-b-2 text-left sm:text-center rounded-r-lg sm:rounded-none ${activeTab === 'settings' ? 'border-indigo-600 text-indigo-600 bg-indigo-50 sm:bg-transparent' : 'border-transparent text-slate-500 hover:text-indigo-400 hover:bg-slate-50 sm:hover:bg-transparent'}`}
+        >
+          Ajustes
+        </button>
       </div>
 
       {/* Content */}
@@ -2804,6 +3011,16 @@ const SchoolDashboard = () => {
                   </div>
                 )}
               </AnimatePresence>
+            </motion.div>
+          )}
+          {activeTab === 'settings' && (
+            <motion.div 
+              key="settings"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <SettingsContent />
             </motion.div>
           )}
         </AnimatePresence>
