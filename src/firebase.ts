@@ -99,13 +99,15 @@ export function handleFirestoreError(error: unknown, operationType: FirestoreOpe
   throw new Error(JSON.stringify(errInfo));
 }
 
-async function testConnection() {
+// Only test connection if needed, not immediately on load
+export async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
+    console.log("Firebase connection successful");
   } catch (error) {
     if(error instanceof Error && error.message.includes('the client is offline')) {
       console.error("Please check your Firebase configuration. ");
     }
   }
 }
-testConnection();
+// Removed immediate top-level call to testConnection()

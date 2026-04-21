@@ -9,9 +9,9 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      // Provide a minimal process.env for client-side libraries that might access it
       'process.env': JSON.stringify(env),
-      'global': 'window', // Fix for some libraries expecting 'global'
+      'global': 'globalThis',
+      'process': { env: {} } 
     },
     resolve: {
       alias: {

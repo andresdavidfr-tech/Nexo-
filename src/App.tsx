@@ -154,6 +154,39 @@ const ThemeToggle = () => {
   );
 };
 
+const NotificationToggle = () => {
+  const { permission, requestPermission, addNotification } = useNotifications();
+
+  const handleToggle = async () => {
+    if (permission === 'default') {
+      const granted = await requestPermission();
+      if (granted) {
+        addNotification({
+          title: 'Notificaciones activadas',
+          content: 'Ahora recibirás avisos urgentes directamente en tu dispositivo.',
+          category: 'success',
+          isImportant: false
+        });
+      }
+    } else if (permission === 'denied') {
+      alert("Para activar las notificaciones, por favor habilita los permisos en la configuración de tu navegador para este sitio.");
+    }
+  };
+
+  if (permission === 'granted') return null;
+
+  return (
+    <Button 
+      variant="ghost" 
+      onClick={handleToggle} 
+      className="p-2 text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+      title="Activar Notificaciones"
+    >
+      <Bell size={20} className="animate-pulse" />
+    </Button>
+  );
+};
+
 // --- Notification System ---
 
 interface AppNotification {
@@ -171,6 +204,8 @@ const NotificationContext = createContext<{
   addNotification: (n: Omit<AppNotification, 'id' | 'read' | 'date'>) => void;
   markAsRead: (id: string) => void;
   unreadCount: number;
+  requestPermission: () => Promise<boolean>;
+  permission: NotificationPermission;
 } | null>(null);
 
 const useNotifications = () => {
@@ -181,6 +216,16 @@ const useNotifications = () => {
 
 const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [permission, setPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
+
+  const requestPermission = async () => {
+    if (typeof Notification === 'undefined') return false;
+    const result = await Notification.requestPermission();
+    setPermission(result);
+    return result === 'granted';
+  };
 
   const addNotification = (n: Omit<AppNotification, 'id' | 'read' | 'date'>) => {
     const newNotification: AppNotification = {
@@ -191,10 +236,27 @@ const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
     };
     setNotifications(prev => [newNotification, ...prev]);
     
+    // Native Browser Notification
+    if (permission === 'granted' && typeof Notification !== 'undefined') {
+      try {
+        new Notification(n.title, {
+          body: n.content,
+          icon: '/favicon.ico',
+        });
+      } catch (e) {
+        console.error("Error showing native notification:", e);
+      }
+    }
+
     // Simulate push notification sound or visual alert
     if (n.category === 'urgent' || n.isImportant) {
-      // High priority alert logic could go here
       console.log("PRIORITY NOTIFICATION:", n.title);
+      // Play a subtle sound if possible
+      try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.volume = 0.5;
+        audio.play().catch(() => {}); // Ignore interaction errors
+      } catch (e) {}
     }
   };
 
@@ -205,7 +267,7 @@ const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <NotificationContext.Provider value={{ notifications, addNotification, markAsRead, unreadCount }}>
+    <NotificationContext.Provider value={{ notifications, addNotification, markAsRead, unreadCount, requestPermission, permission }}>
       {children}
       <NotificationCenter />
     </NotificationContext.Provider>
@@ -577,6 +639,7 @@ const ParentDashboard = () => {
   const [auths, setAuths] = useState<Authorization[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const studentsRef = useRef<Student[]>([]);
+  const authsRef = useRef<Authorization[]>([]);
   const [school, setSchool] = useState<School | null>(null);
   const [activeTab, setActiveTab] = useState<'inbox' | 'auths' | 'students' | 'calendar' | 'messages'>('inbox');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -597,6 +660,10 @@ const ParentDashboard = () => {
   useEffect(() => {
     studentsRef.current = students;
   }, [students]);
+
+  useEffect(() => {
+    authsRef.current = auths;
+  }, [auths]);
 
   const handleDeleteAuth = async (id: string) => {
     try {
@@ -693,6 +760,25 @@ const ParentDashboard = () => {
         
         return { id, ...data } as Authorization;
       });
+
+      // Notify on status changes
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'modified') {
+          const newData = change.doc.data() as Authorization;
+          const oldData = authsRef.current.find(a => a.id === change.doc.id);
+          
+          if (newData.status === 'used' && oldData?.status !== 'used') {
+            const student = studentsRef.current.find(s => s.id === newData.studentId);
+            addNotification({
+              title: 'Retiro Confirmado ✅',
+              content: `${student?.name || 'El alumno'} ha sido retirado por ${newData.authorizedPersonName}.`,
+              category: 'success',
+              isImportant: true
+            });
+          }
+        }
+      });
+
       setAuths(updatedAuths);
     }, (error) => handleFirestoreError(error, FirestoreOperationType.LIST, 'authorizations'));
 
@@ -876,6 +962,7 @@ const ParentDashboard = () => {
             </div>
           )}
           <ThemeToggle />
+          <NotificationToggle />
           {user && <UserProfileAvatar user={user} />}
           <div className="text-right hidden sm:block">
             <p className="text-sm font-bold">{user?.name}</p>
@@ -2046,6 +2133,7 @@ const SchoolDashboard = () => {
             <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
           </label>
           <ThemeToggle />
+          <NotificationToggle />
           {user && <UserProfileAvatar user={user} />}
           <div className="text-right hidden sm:block">
             <p className="text-sm font-bold">{user?.name}</p>
@@ -2920,6 +3008,7 @@ const AdminDashboard = () => {
         </div>
         <div className="flex items-center gap-4">
           <ThemeToggle />
+          <NotificationToggle />
           {user && <UserProfileAvatar user={user} />}
           <div className="text-right hidden sm:block">
             <p className="text-sm font-bold">{user?.name}</p>

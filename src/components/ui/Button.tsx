@@ -8,9 +8,10 @@ interface ButtonProps {
   disabled?: boolean;
   type?: 'button' | 'submit' | 'reset';
   size?: string;
+  title?: string;
 }
 
-export const Button = ({ children, onClick, variant = 'primary', className = '', disabled = false, type = 'button', size }: ButtonProps) => {
+export const Button = ({ children, onClick, variant = 'primary', className = '', disabled = false, type = 'button', size, title }: ButtonProps) => {
   const variants: Record<string, string> = {
     primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-100',
     secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50',
@@ -24,6 +25,7 @@ export const Button = ({ children, onClick, variant = 'primary', className = '',
       type={type}
       disabled={disabled}
       onClick={onClick}
+      title={title}
       className={`px-4 py-2.5 rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 ${variants[variant]} ${className}`}
     >
       {children}

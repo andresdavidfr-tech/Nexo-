@@ -3,7 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Nexo - Conectando Familias</title>
+    <script>
+      // Global polyfills to prevent crashes in production environments like Vercel
+      window.global = window;
+      window.process = {
+        env: { NODE_ENV: 'production' },
+        browser: true,
+        version: '',
+        nextTick: (fn) => setTimeout(fn, 0)
+      };
+
+      // Catch early errors
+      window.addEventListener('error', function(event) {
+        console.error('EARLY ERROR:', event.error || event.message);
+        if (!document.getElementById('root')?.innerHTML) {
+           const root = document.getElementById('root');
+           if (root) root.innerHTML = '<div style="padding:40px;color:red;font-family:sans-serif;"><h2>Error al cargar la aplicación</h2><p>Por favor, revisa la consola del navegador para más detalles.</p></div>';
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
