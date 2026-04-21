@@ -15,7 +15,12 @@ import {
 import { getFirestore, doc, getDoc, getDocs, setDoc, collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocFromServer, orderBy, limit } from 'firebase/firestore';
 
 // Import the Firebase configuration
-import firebaseConfig from '../firebase-applet-config.json';
+import config from '../firebase-applet-config.json';
+const firebaseConfig = config as any;
+
+if (!firebaseConfig.apiKey) {
+  console.error("CRITICAL: Firebase configuration appears to be missing or invalid. Check firebase-applet-config.json.");
+}
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
