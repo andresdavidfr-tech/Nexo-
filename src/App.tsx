@@ -347,13 +347,16 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("Auth state changed:", firebaseUser?.email || "No user");
       if (firebaseUser) {
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data() as UserProfile;
+            console.log("User doc found:", userData.role);
             setUser(userData);
           } else {
+            console.log("User doc not found, checking for pre-created account...");
             // Check if admin pre-created a user with this email
             const usersRef = collection(db, 'users');
             const q = query(usersRef, where('email', '==', firebaseUser.email));
@@ -362,6 +365,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (!querySnapshot.empty) {
               const existingDoc = querySnapshot.docs[0];
               const existingData = existingDoc.data() as UserProfile;
+              console.log("Pre-created account found for email:", firebaseUser.email);
               
               const newUser: UserProfile = {
                 ...existingData,
@@ -372,6 +376,7 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               await deleteDoc(doc(db, 'users', existingDoc.id));
               setUser(newUser);
             } else {
+              console.log("No pre-created account, using default parent role");
               // Default to parent if not pre-created
               const newUser: UserProfile = {
                 uid: firebaseUser.uid,
@@ -392,7 +397,22 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       setLoading(false);
     });
-    return unsubscribe;
+    
+    // Safety fallback for loading state
+    const timeoutId = setTimeout(() => {
+      setLoading(current => {
+        if (current) {
+          console.warn("Auth loading timeout reached, forcing loading false");
+          return false;
+        }
+        return current;
+      });
+    }, 10000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const login = async () => {
