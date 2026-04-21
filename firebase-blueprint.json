@@ -1,0 +1,105 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile for parents and school staff",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email" },
+        "name": { "type": "string", "description": "Full name" },
+        "role": { "type": "string", "enum": ["parent", "school"], "description": "User role" },
+        "schoolId": { "type": "string", "description": "Associated school ID" },
+        "gradeId": { "type": "string", "description": "Grade ID (for staff)" },
+        "classId": { "type": "string", "description": "Class ID (for staff)" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "School": {
+      "title": "School",
+      "description": "School institution details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "School name" },
+        "address": { "type": "string", "description": "School address" },
+        "logoUrl": { "type": "string", "description": "School logo URL" }
+      },
+      "required": ["name"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student enrolled in a school",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Student name" },
+        "schoolId": { "type": "string", "description": "School ID" },
+        "parentId": { "type": "string", "description": "Parent UID" },
+        "photoUrl": { "type": "string", "description": "Student photo" },
+        "grade": { "type": "string", "description": "Grade level" },
+        "class": { "type": "string", "description": "Class section" },
+        "description": { "type": "string", "description": "Student description" }
+      },
+      "required": ["name", "schoolId", "parentId"]
+    },
+    "Communication": {
+      "title": "Communication",
+      "description": "School announcements and messages",
+      "type": "object",
+      "properties": {
+        "schoolId": { "type": "string", "description": "School ID" },
+        "title": { "type": "string", "description": "Message title" },
+        "content": { "type": "string", "description": "Message content" },
+        "date": { "type": "string", "format": "date-time", "description": "Message date" },
+        "isImportant": { "type": "boolean", "description": "Marked as important" },
+        "summary": { "type": "string", "description": "AI generated summary" },
+        "category": { "type": "string", "enum": ["event", "urgent", "info"], "description": "Message category" },
+        "deadline": { "type": "string", "format": "date-time", "description": "Action deadline" },
+        "readBy": { "type": "array", "items": { "type": "string" }, "description": "List of user IDs who read the message" },
+        "targetGrades": { "type": "array", "items": { "type": "string" }, "description": "Target grades for the message" },
+        "location": { "type": "string", "description": "Event location" },
+        "authorId": { "type": "string", "description": "Author UID" }
+      },
+      "required": ["schoolId", "title", "content", "date"]
+    },
+    "Authorization": {
+      "title": "Authorization",
+      "description": "Pickup authorization for a student",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "Student ID" },
+        "authorizedPersonName": { "type": "string", "description": "Name of person authorized to pick up" },
+        "authorizedPersonDni": { "type": "string", "description": "DNI of authorized person" },
+        "authorizedPersonPhotoUrl": { "type": "string", "description": "Photo of authorized person" },
+        "date": { "type": "string", "format": "date-time", "description": "Authorization date" },
+        "expiresAt": { "type": "string", "format": "date-time", "description": "Expiration date" },
+        "qrCode": { "type": "string", "description": "Unique QR code string" },
+        "status": { "type": "string", "enum": ["pending", "used", "expired"], "description": "Authorization status" },
+        "schoolId": { "type": "string", "description": "School ID" },
+        "parentId": { "type": "string", "description": "Parent UID" }
+      },
+      "required": ["studentId", "authorizedPersonName", "date", "qrCode", "status", "schoolId", "parentId"]
+    }
+  },
+  "firestore": {
+    "/schools/{schoolId}": {
+      "schema": "School",
+      "description": "School details"
+    },
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Student records"
+    },
+    "/communications/{commId}": {
+      "schema": "Communication",
+      "description": "School communications"
+    },
+    "/authorizations/{authId}": {
+      "schema": "Authorization",
+      "description": "Pickup authorizations"
+    }
+  }
+}

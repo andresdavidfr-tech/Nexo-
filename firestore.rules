@@ -1,0 +1,178 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: schools
+    // Fields: name (string), address (string), logoUrl (string)
+    //
+    // Collection: users
+    // Fields: uid (string), email (string), name (string), role (string), schoolId (string)
+    //
+    // Collection: students
+    // Fields: name (string), schoolId (string), parentId (string), photoUrl (string)
+    //
+    // Collection: communications
+    // Fields: schoolId (string), title (string), content (string), date (string), isImportant (bool), summary (string)
+    //
+    // Collection: authorizations
+    // Fields: studentId (string), authorizedPersonName (string), authorizedPersonDni (string), date (string), qrCode (string), status (string), schoolId (string), parentId (string)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "andresdavidfr@gmail.com" && request.auth.token.email_verified == true ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          getUserData(request.auth.uid).role == 'admin'));
+    }
+
+    function isSchoolStaff() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        getUserData(request.auth.uid).role == 'school';
+    }
+
+    function isParent() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        getUserData(request.auth.uid).role == 'parent';
+    }
+
+    function isSchoolStaffOf(schoolId) {
+      return isSchoolStaff() && getUserData(request.auth.uid).schoolId == schoolId;
+    }
+
+    function isParentOf(parentId) {
+      return isParent() && request.auth.uid == parentId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /schools/{schoolId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+
+    match /users/{uid} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['uid', 'email', 'role']) &&
+               data.uid is string && data.uid.size() > 0 &&
+               data.email is string && isValidEmail(data.email) &&
+               data.role in ['parent', 'school', 'admin'] &&
+               (!('photoUrl' in data) || data.photoUrl is string) &&
+               (!('name' in data) || data.name is string);
+      }
+
+      // Protect PII: only owner or staff or admin can read user profile
+      allow read: if isOwner(uid) || isSchoolStaff() || isAdmin();
+      allow create: if (isOwner(uid) || isAdmin()) && isValidUser(request.resource.data);
+      allow update: if (isOwner(uid) || isAdmin()) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      function isValidStudent(data) {
+        return data.keys().hasAll(['name', 'schoolId', 'parentId']) &&
+               data.name is string && data.name.size() > 0 &&
+               data.schoolId is string && data.parentId is string;
+      }
+
+      allow read: if isAuthenticated() && (isParentOf(resource.data.parentId) || isSchoolStaffOf(resource.data.schoolId) || isAdmin());
+      allow create: if (isAdmin() || (isAuthenticated() && isOwner(request.resource.data.parentId))) && isValidStudent(request.resource.data);
+      allow update: if isAdmin() || (isAuthenticated() && isParentOf(resource.data.parentId) && isValidStudent(request.resource.data)) || isSchoolStaffOf(resource.data.schoolId);
+      allow delete: if isAdmin() || (isAuthenticated() && isParentOf(resource.data.parentId));
+    }
+
+    match /communications/{commId} {
+      function isValidComm(data) {
+        return data.keys().hasAll(['schoolId', 'title', 'content', 'date']) &&
+               data.schoolId is string && data.title is string && data.content is string &&
+               (!('location' in data) || data.location is string) &&
+               (!('authorId' in data) || data.authorId is string);
+      }
+
+      allow read: if isAuthenticated() && (isAdmin() || getUserData(request.auth.uid).schoolId == resource.data.schoolId);
+      allow create: if (isAdmin() || isSchoolStaff() || (isParent() && request.resource.data.category == 'event' && request.resource.data.authorId == request.auth.uid)) && isValidComm(request.resource.data);
+      allow update: if (isAdmin() || isSchoolStaff() || (isParent() && resource.data.authorId == request.auth.uid && request.resource.data.category == 'event')) && isValidComm(request.resource.data);
+      allow delete: if isAdmin() || isSchoolStaff() || (isParent() && resource.data.authorId == request.auth.uid);
+    }
+
+    match /authorizations/{authId} {
+      function isValidAuth(data) {
+        return data.keys().hasAll(['studentId', 'authorizedPersonName', 'date', 'qrCode', 'status', 'schoolId', 'parentId']) &&
+               data.studentId is string && data.authorizedPersonName is string &&
+               data.qrCode is string && data.status in ['pending', 'used', 'expired'];
+      }
+
+      allow read: if isAuthenticated() && (isParentOf(resource.data.parentId) || isSchoolStaffOf(resource.data.schoolId) || isAdmin());
+      allow create: if (isAdmin() || (isAuthenticated() && getUserData(request.auth.uid).role == 'parent' && isOwner(request.resource.data.parentId))) && isValidAuth(request.resource.data);
+      allow update: if isAdmin() || (isAuthenticated() && isParentOf(resource.data.parentId) && isValidAuth(request.resource.data)) || (isSchoolStaffOf(resource.data.schoolId) && request.resource.data.status in ['pending', 'used', 'expired']);
+      allow delete: if isAdmin() || (isAuthenticated() && isParentOf(resource.data.parentId));
+    }
+
+    match /outing_authorizations/{authId} {
+      function isValidOutingAuth(data) {
+        return data.keys().hasAll(['schoolId', 'title', 'studentId', 'parentId', 'isSigned']) &&
+               data.schoolId is string && data.title is string && data.studentId is string &&
+               data.parentId is string && data.isSigned is bool;
+      }
+
+      allow read: if isAuthenticated() && (isParentOf(resource.data.parentId) || isSchoolStaffOf(resource.data.schoolId) || isAdmin());
+      allow create: if (isAdmin() || isSchoolStaffOf(request.resource.data.schoolId)) && isValidOutingAuth(request.resource.data);
+      allow update: if isAdmin() || (isAuthenticated() && isParentOf(resource.data.parentId) && (request.resource.data.isSigned is bool || request.resource.data.signedAt is string)) || isSchoolStaffOf(resource.data.schoolId);
+      allow delete: if isAdmin() || isSchoolStaffOf(resource.data.schoolId);
+    }
+
+    match /calendar_events/{eventId} {
+      function isValidEvent(data) {
+        return data.keys().hasAll(['schoolId', 'title', 'date', 'type']) &&
+               data.schoolId is string && data.title is string && data.date is string &&
+               data.type in ['academic', 'holiday', 'meeting', 'outing'];
+      }
+
+      allow read: if isAuthenticated();
+      allow create, update, delete: if (isAdmin() || isSchoolStaff()) && isValidEvent(request.resource.data);
+    }
+
+    match /material_requests/{requestId} {
+      function isValidRequest(data) {
+        return data.keys().hasAll(['schoolId', 'course', 'title', 'items', 'date']) &&
+               data.schoolId is string && data.course is string && data.title is string &&
+               data.items is list && data.date is string;
+      }
+
+      allow read: if isAuthenticated();
+      allow create, update, delete: if (isAdmin() || isSchoolStaff()) && isValidRequest(request.resource.data);
+    }
+  }
+}

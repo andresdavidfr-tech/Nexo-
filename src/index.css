@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-pastel-blue: #E0F2FE;
+  --color-pastel-green: #DCFCE7;
+  --color-pastel-purple: #F3E8FF;
+  --color-pastel-pink: #FCE7F3;
+  --color-pastel-yellow: #FEF9C3;
+  --color-vibrant-orange: #FF7E33;
+  --color-vibrant-pink: #FF33A1;
+}
+
+@layer base {
+  body {
+    @apply antialiased text-slate-900 bg-[#FAF9F6] transition-colors duration-300;
+  }
+  .dark body {
+    @apply text-slate-100 bg-slate-950;
+  }
+  .dark .bg-white {
+    @apply bg-slate-900;
+  }
+  .dark .bg-slate-50 {
+    @apply bg-slate-950;
+  }
+  .dark .border-slate-100, .dark .border-slate-200 {
+    @apply border-slate-800;
+  }
+  .dark .text-slate-900 {
+    @apply text-white;
+  }
+  .dark .text-slate-600, .dark .text-slate-500 {
+    @apply text-slate-400;
+  }
+  .dark .text-slate-400 {
+    @apply text-slate-500;
+  }
+  .dark .shadow-indigo-100 {
+    @apply shadow-indigo-900/20;
+  }
+  .dark .bg-indigo-50 {
+    @apply bg-indigo-900/20;
+  }
+  .dark .text-indigo-800 {
+    @apply text-indigo-200;
+  }
+  .dark .border-indigo-100 {
+    @apply border-indigo-900/30;
+  }
+}
+
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(15deg); }
+  40% { transform: rotate(-15deg); }
+  60% { transform: rotate(10deg); }
+  80% { transform: rotate(-10deg); }
+}
+
+.animate-bell {
+  animation: bell-ring 0.5s ease-in-out;
+}
+
+.glass-card {
+  @apply bg-white/70 backdrop-blur-lg border border-white/20 shadow-xl shadow-slate-200/50;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E2E8F0;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #CBD5E1;
+}

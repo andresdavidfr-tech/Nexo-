@@ -1,0 +1,5 @@
+{
+  "name": "Nexo",
+  "description": "Plataforma escolar moderna para centralizar la comunicación, autorizar retiros con QR seguro y validación en tiempo real.",
+  "requestFramePermissions": ["camera"]
+}
