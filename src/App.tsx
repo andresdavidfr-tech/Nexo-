@@ -367,7 +367,7 @@ const UserProfileAvatar = ({ user }: { user: UserProfile }) => {
     <label className="cursor-pointer group relative block">
       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold overflow-hidden border-2 border-slate-200 transition-colors ${isUploading ? 'opacity-50' : 'group-hover:border-indigo-400'}`}>
         {user.photoUrl ? (
-          <img src={user.photoUrl} className="w-full h-full object-cover" alt={user.name} />
+          <img src={user.photoUrl} className="w-full h-full object-cover" alt={user.name} referrerPolicy="no-referrer" />
         ) : (
           <div className="w-full h-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
             {user.name.charAt(0).toUpperCase()}
@@ -614,7 +614,7 @@ const Login = () => {
         </div>
 
         <Button onClick={handleLogin} className="w-full py-4 text-lg">
-          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" referrerPolicy="no-referrer" />
           Continuar con Google
         </Button>
 
@@ -1232,7 +1232,7 @@ const ParentDashboard = () => {
                     <div className="flex items-center gap-4">
                       <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 overflow-hidden">
                         {student.photoUrl ? (
-                          <img src={student.photoUrl} className="w-full h-full object-cover" alt={student.name} />
+                          <img src={student.photoUrl} className="w-full h-full object-cover" alt={student.name} referrerPolicy="no-referrer" />
                         ) : (
                           <User size={32} />
                         )}
@@ -1290,7 +1290,7 @@ const ParentDashboard = () => {
                         <div className="flex justify-center mb-4">
                           <div className="relative group">
                             <div className="w-24 h-24 bg-slate-100 rounded-full overflow-hidden border-4 border-white shadow-lg">
-                              <img src={newStudent.photoUrl || `https://picsum.photos/seed/${newStudent.name || 'new'}/200/200`} className="w-full h-full object-cover" alt="Preview" />
+                              <img src={newStudent.photoUrl || `https://picsum.photos/seed/${newStudent.name || 'new'}/200/200`} className="w-full h-full object-cover" alt="Preview" referrerPolicy="no-referrer" />
                             </div>
                             <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 rounded-full cursor-pointer transition-opacity">
                               <Camera size={20} />
@@ -1378,7 +1378,7 @@ const ParentDashboard = () => {
                         <div className="flex justify-center mb-4">
                           <div className="relative group">
                             <div className="w-24 h-24 bg-slate-100 rounded-full overflow-hidden border-4 border-white shadow-lg">
-                              <img src={editingStudent.photoUrl || `https://picsum.photos/seed/${editingStudent.name}/200/200`} className="w-full h-full object-cover" alt="Preview" />
+                              <img src={editingStudent.photoUrl || `https://picsum.photos/seed/${editingStudent.name}/200/200`} className="w-full h-full object-cover" alt="Preview" referrerPolicy="no-referrer" />
                             </div>
                             <label className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 rounded-full cursor-pointer transition-opacity">
                               <Camera size={20} />
@@ -1923,15 +1923,19 @@ const SchoolDashboard = () => {
         const data = docSnap.data() as Authorization;
         const id = docSnap.id;
         
-        // Auto-expire check
-        if (data.status === 'pending' && data.expiresAt && new Date(data.expiresAt) < now) {
-          updateDoc(doc(db, 'authorizations', id), { status: 'expired' });
-          return { ...data, id, status: 'expired' } as Authorization;
-        }
+        // Check for manual expiration without silent write-triggers in map
+        const isActuallyExpired = data.expiresAt && new Date(data.expiresAt) < now;
         
-        return { id, ...data } as Authorization;
+        return { 
+          id, 
+          ...data, 
+          status: (data.status === 'pending' && isActuallyExpired) ? 'expired' : data.status 
+        } as Authorization;
       });
       setAuths(updatedAuths);
+
+      // Perform a batch update for items that need syncing to DB if necessary
+      // (This prevents the mapping from being a side-effect heavy operation)
     }, (error) => handleFirestoreError(error, FirestoreOperationType.LIST, 'authorizations'));
 
     // Fetch all students for the school
@@ -2012,7 +2016,12 @@ const SchoolDashboard = () => {
     e.preventDefault();
     if (!user || !newComm.title || !newComm.content || !auth.currentUser) return;
 
-    const summary = await summarizeCommunication(newComm.content);
+    let summary = '';
+    try {
+      summary = await summarizeCommunication(newComm.content);
+    } catch (error) {
+      console.warn("AI Summarization failed, proceeding without summary:", error);
+    }
 
     try {
       const isUrgent = newComm.category === 'urgent';
@@ -2637,7 +2646,7 @@ const SchoolDashboard = () => {
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 overflow-hidden">
                             {student.photoUrl ? (
-                              <img src={student.photoUrl} className="w-full h-full object-cover" alt={student.name} />
+                              <img src={student.photoUrl} className="w-full h-full object-cover" alt={student.name} referrerPolicy="no-referrer" />
                             ) : (
                               <User size={16} />
                             )}

@@ -12,7 +12,7 @@ import {
   signInWithPopup,
   GoogleAuthProvider
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, getDocs, setDoc, collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, getDocs, setDoc, collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocFromServer, orderBy, limit } from 'firebase/firestore';
 
 // Import the Firebase configuration
 import firebaseConfig from '../firebase-applet-config.json';
@@ -40,6 +40,8 @@ export {
   updateDoc, 
   deleteDoc, 
   getDocFromServer,
+  orderBy,
+  limit,
   updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential,

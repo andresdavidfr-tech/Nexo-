@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, X, Send, Bot, User, Loader2, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Markdown from 'react-markdown';
 import { 
   collection, 
   query, 
@@ -9,7 +10,9 @@ import {
   db,
   auth,
   handleFirestoreError,
-  FirestoreOperationType
+  FirestoreOperationType,
+  orderBy,
+  limit
 } from '../firebase';
 import { UserProfile, Communication, Student, Authorization } from '../types';
 import { askAISearch } from '../services/geminiService';
@@ -53,7 +56,9 @@ export const AISearchAssistant: React.FC<AISearchAssistantProps> = ({ user }) =>
 
     const qComms = query(collection(db, 'communications'), where('schoolId', '==', schoolId));
     const unsubComms = onSnapshot(qComms, (snap) => {
-      setComms(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Communication)));
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Communication));
+      // Sort and limit in memory to avoid index requirements
+      setComms(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 20));
     }, (error) => handleFirestoreError(error, FirestoreOperationType.LIST, 'communications'));
 
     const qAuths = user.role === 'parent' 
@@ -61,7 +66,8 @@ export const AISearchAssistant: React.FC<AISearchAssistantProps> = ({ user }) =>
       : query(collection(db, 'authorizations'), where('schoolId', '==', schoolId));
     
     const unsubAuths = onSnapshot(qAuths, (snap) => {
-      setAuths(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Authorization)));
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Authorization));
+      setAuths(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10));
     }, (error) => handleFirestoreError(error, FirestoreOperationType.LIST, 'authorizations'));
 
     return () => {
@@ -206,7 +212,9 @@ export const AISearchAssistant: React.FC<AISearchAssistantProps> = ({ user }) =>
                         ? 'bg-indigo-600 text-white rounded-tr-none' 
                         : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-sm'
                     }`}>
-                      {msg.content}
+                      <div className="prose prose-sm prose-slate max-w-none">
+                        <Markdown>{msg.content}</Markdown>
+                      </div>
                     </div>
                   </div>
                 </div>

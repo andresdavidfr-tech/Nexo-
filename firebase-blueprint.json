@@ -8,10 +8,10 @@
         "uid": { "type": "string", "description": "Firebase Auth UID" },
         "email": { "type": "string", "description": "User email" },
         "name": { "type": "string", "description": "Full name" },
-        "role": { "type": "string", "enum": ["parent", "school"], "description": "User role" },
+        "role": { "type": "string", "enum": ["parent", "school", "admin"], "description": "User role" },
         "schoolId": { "type": "string", "description": "Associated school ID" },
-        "gradeId": { "type": "string", "description": "Grade ID (for staff)" },
-        "classId": { "type": "string", "description": "Class ID (for staff)" }
+        "assignedGrades": { "type": "array", "items": { "type": "string" }, "description": "Grades assigned to the staff member" },
+        "managedModules": { "type": "array", "items": { "type": "string" }, "description": "Modules the staff member can manage" }
       },
       "required": ["uid", "email", "role"]
     },
